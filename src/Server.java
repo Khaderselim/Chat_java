@@ -8,27 +8,21 @@ import java.util.Map;
 public class Server {
     private static final int CONTROL_PORT = 1234;
     private static final int MESSAGE_PORT = 1235;
-    private static final int VOICE_PORT   = 1236;  // dedicated voice port
+    private static final int VOICE_PORT   = 1236;
 
-    private static final Map<String, ClientHandler>     clientHandlers = Collections.synchronizedMap(new HashMap<>());
-    public  static final Map<String, String>             userMap        = Collections.synchronizedMap(new HashMap<>());
+    private static final Map<String, ClientHandler> clientHandlers = Collections.synchronizedMap(new HashMap<>());
+    public  static final Map<String, String>userMap = Collections.synchronizedMap(new HashMap<>());
     private static final Map<PrintWriter, ClientHandler> messageWriters = Collections.synchronizedMap(new HashMap<>());
 
-    // voice: username -> their socket OutputStream (so we can relay audio to them)
     private static final Map<String, OutputStream> voiceOutputs = Collections.synchronizedMap(new HashMap<>());
 
     public static void main(String[] args) {
-        System.out.println("Chat server started:");
-        System.out.println("- Control port: " + CONTROL_PORT);
-        System.out.println("- Message port: " + MESSAGE_PORT);
-        System.out.println("- Voice port:   " + VOICE_PORT);
 
         new Thread(Server::startControlServer).start();
         new Thread(Server::startMessageServer).start();
         new Thread(Server::startVoiceServer).start();
     }
 
-    // ── Server listeners ──────────────────────────────────────────────────────
 
     private static void startControlServer() {
         try (ServerSocket ss = new ServerSocket(CONTROL_PORT)) {
@@ -48,7 +42,6 @@ public class Server {
         } catch (IOException e) { e.printStackTrace(); }
     }
 
-    // ── Control Handler ───────────────────────────────────────────────────────
 
     private static class ControlHandler extends Thread {
         private final Socket socket;
@@ -102,7 +95,6 @@ public class Server {
         }
     }
 
-    // ── Message Handler ───────────────────────────────────────────────────────
 
     private static class MessageHandler extends Thread {
         private final Socket socket;
@@ -184,13 +176,6 @@ public class Server {
         }
     }
 
-    // ── Voice Handler ─────────────────────────────────────────────────────────
-    //
-    // Protocol:
-    //   1. Client sends a UTF-8 header line:  "username:target\n"
-    //   2. Client then streams raw PCM audio bytes continuously.
-    //   Server reads the header, registers the client, then relays every incoming
-    //   byte directly to the target's OutputStream — zero processing.
 
     private static class VoiceHandler extends Thread {
         private final Socket socket;
@@ -205,7 +190,6 @@ public class Server {
                 InputStream  in  = socket.getInputStream();
                 OutputStream out = socket.getOutputStream();
 
-                // Read header line byte-by-byte so we don't buffer any audio
                 String header = readLine(in);
                 if (header == null) return;
 
@@ -239,10 +223,7 @@ public class Server {
             }
         }
 
-        /**
-         * Reads one '\n'-terminated line from a raw InputStream byte-by-byte.
-         * Safe to call before switching the stream to binary mode.
-         */
+
         private String readLine(InputStream in) throws IOException {
             StringBuilder sb = new StringBuilder();
             int b;
@@ -254,7 +235,6 @@ public class Server {
         }
     }
 
-    // ── Simple client info holder ─────────────────────────────────────────────
 
     private static class ClientHandler {
         final String username;

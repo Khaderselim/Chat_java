@@ -6,7 +6,6 @@ import java.net.Socket;
 import java.util.Enumeration;
 
 public class Client {
-    // ── UI components ─────────────────────────────────────────────────────────
     public static JButton connectBtn, disconnectBtn, sendBtn, newChatBtn, singlebtn;
     public static JLabel  statusLbl, hostLbl;
     public static JTextField hostField, inputField;
@@ -15,22 +14,19 @@ public class Client {
     public static ButtonGroup singlenameGroup;
     public static JFrame frame;
 
-    // ── Network ───────────────────────────────────────────────────────────────
     public static Socket        controlSocket, messageSocket, voiceSocket;
     public static PrintWriter   controlOut, messageOut;
     public static BufferedReader controlIn, messageIn;
 
-    // ── Audio ─────────────────────────────────────────────────────────────────
     private static final AudioFormat AUDIO_FORMAT = new AudioFormat(16000, 16, 1, true, true);
     public static TargetDataLine microphone;   // mic  → network
     public static SourceDataLine speakers;     // network → speakers
     private volatile Thread micThread;
     private volatile Thread speakerThread;
 
-    // ── State ─────────────────────────────────────────────────────────────────
     public static String selectedName, username;
 
-    // ─────────────────────────────────────────────────────────────────────────
+
 
     public Client() {
         frame = new JFrame("Text Chat");
@@ -38,7 +34,6 @@ public class Client {
         frame.setSize(500, 400);
         frame.setLocationRelativeTo(null);
 
-        // ── Login Panel ──────────────────────────────────────────────────────
         loginPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 20));
         loginPanel.setBackground(new Color(240, 240, 240));
         hostLbl   = new JLabel("Username:");
@@ -51,7 +46,6 @@ public class Client {
         loginPanel.add(connectBtn);
         loginPanel.add(statusLbl);
 
-        // ── Chat Panel ───────────────────────────────────────────────────────
         chatPanel = new JPanel(new BorderLayout(10, 10));
         chatPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         messageArea = new JTextArea();
@@ -75,7 +69,6 @@ public class Client {
         chatPanel.add(scrollPane,  BorderLayout.CENTER);
         chatPanel.add(inputPanel,  BorderLayout.SOUTH);
 
-        // ── Select Panel ─────────────────────────────────────────────────────
         selectPanel = new JPanel(new GridLayout(2, 1, 10, 10));
         selectPanel.setBorder(BorderFactory.createEmptyBorder(50, 100, 50, 100));
         selectPanel.setBackground(new Color(240, 240, 240));
@@ -91,7 +84,6 @@ public class Client {
         selectPanel.add(selectLbl);
         selectPanel.add(buttonPanel);
 
-        // ── Single Panel ─────────────────────────────────────────────────────
         singlePanel = new JPanel(new BorderLayout(10, 10));
         singlePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         singlePanel.setBackground(new Color(240, 240, 240));
@@ -115,7 +107,6 @@ public class Client {
         singlePanel.add(nameScrollPane,    BorderLayout.CENTER);
         singlePanel.add(singleButtonPanel, BorderLayout.SOUTH);
 
-        // ── Wire up buttons ───────────────────────────────────────────────────
         frame.add(loginPanel);
         frame.setVisible(true);
 
@@ -126,7 +117,6 @@ public class Client {
         newChatBtn.addActionListener(e    -> startNewChat());
     }
 
-    // ── Connection ────────────────────────────────────────────────────────────
 
     private void connectToServer() {
         try {
@@ -150,7 +140,6 @@ public class Client {
         }
     }
 
-    // ── Panel switching ───────────────────────────────────────────────────────
 
     private void switchPanel(JPanel panel) {
         frame.getContentPane().removeAll();
@@ -159,7 +148,6 @@ public class Client {
         frame.repaint();
     }
 
-    // ── Single-chat flow ──────────────────────────────────────────────────────
 
     private void switchToSinglePanel() {
         controlOut.println("single");
@@ -207,20 +195,16 @@ public class Client {
                 closeMessageSocket();  // clean up any previous session
                 closeVoiceSocket();
 
-                // ── Text socket (port 1235) ───────────────────────────────
                 messageSocket = new Socket("localhost", 1235);
                 messageOut    = new PrintWriter(messageSocket.getOutputStream(), true);
                 messageIn     = new BufferedReader(new InputStreamReader(messageSocket.getInputStream()));
                 messageOut.println(username + ":" + selectedName);
 
-                // ── Voice socket (port 1236) ──────────────────────────────
                 voiceSocket = new Socket("localhost", 1236);
-                // Send header line, then switch to raw binary
                 OutputStream voiceOut = voiceSocket.getOutputStream();
                 voiceOut.write((username + ":" + selectedName + "\n").getBytes());
                 voiceOut.flush();
 
-                // ── Open audio lines ──────────────────────────────────────
                 DataLine.Info micInfo = new DataLine.Info(TargetDataLine.class, AUDIO_FORMAT);
                 microphone = (TargetDataLine) AudioSystem.getLine(micInfo);
                 microphone.open(AUDIO_FORMAT);
@@ -288,7 +272,6 @@ public class Client {
         speakerThread.start();
     }
 
-    // ── Message I/O ───────────────────────────────────────────────────────────
 
     private void startListeningToMessages() {
         new Thread(() -> {
@@ -322,7 +305,6 @@ public class Client {
         inputField.requestFocus();
     }
 
-    // ── New Chat / Disconnect ─────────────────────────────────────────────────
 
     private void startNewChat() {
         new Thread(() -> {
@@ -349,7 +331,6 @@ public class Client {
         newChatBtn.setEnabled(false);
     }
 
-    // ── Cleanup helpers ───────────────────────────────────────────────────────
 
     private void closeMessageSocket() {
         try {
