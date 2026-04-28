@@ -8,7 +8,7 @@ import java.util.Map;
 public class Server {
     private static final int CONTROL_PORT = 1234;
     private static final int MESSAGE_PORT = 1235;
-    private static final int VOICE_PORT   = 1236;
+    private static final int VOICE_PORT = 1236;
 
     private static final Map<String, ClientHandler> clientHandlers = Collections.synchronizedMap(new HashMap<>());
     public  static final Map<String, String>userMap = Collections.synchronizedMap(new HashMap<>());
@@ -41,7 +41,6 @@ public class Server {
             while (true) { new VoiceHandler(ss.accept()).start(); }
         } catch (IOException e) { e.printStackTrace(); }
     }
-
 
     private static class ControlHandler extends Thread {
         private final Socket socket;
@@ -114,7 +113,7 @@ public class Server {
                 String sessionInfo = in.readLine();
                 if (sessionInfo != null) {
                     String[] parts = sessionInfo.split(":", 2);
-                    username       = parts.length > 0 ? parts[0] : "Anonymous";
+                    username = parts.length > 0 ? parts[0] : "Anonymous";
                     selectedTarget = parts.length > 1 ? parts[1] : "";
                     userMap.put(username, selectedTarget);
                     messageWriters.put(out, clientHandlers.getOrDefault(username, new ClientHandler(username)));
@@ -194,15 +193,12 @@ public class Server {
                 if (header == null) return;
 
                 String[] parts = header.split(":", 2);
-                username       = parts.length > 0 ? parts[0] : "Unknown";
+                username = parts.length > 0 ? parts[0] : "Unknown";
                 selectedTarget = parts.length > 1 ? parts[1] : "";
-
                 voiceOutputs.put(username, out);
                 System.out.println("[VOICE] " + username + " connected, target=" + selectedTarget);
-
-                // Pure relay: read from sender, write to target
                 byte[] buf = new byte[1024];
-                int    n;
+                int n;
                 while ((n = in.read(buf)) > 0) {
                     OutputStream targetOut = voiceOutputs.get(selectedTarget);
                     if (targetOut != null) {
@@ -216,11 +212,15 @@ public class Server {
                 }
             } catch (IOException e) {
                 System.out.println("[VOICE] Error for " + username + ": " + e.getMessage());
-            } finally {
-                if (username != null) voiceOutputs.remove(username);
-                try { socket.close(); } catch (IOException ignored) {}
-                System.out.println("[VOICE] Closed for: " + username);
             }
+            if (username != null) voiceOutputs.remove(username);
+            try {
+                socket.close();
+            } catch (IOException ex) {
+
+            }
+            System.out.println("[VOICE] Closed for: " + username);
+
         }
 
 
@@ -238,6 +238,8 @@ public class Server {
 
     private static class ClientHandler {
         final String username;
-        ClientHandler(String username) { this.username = username; }
+        ClientHandler(String username) {
+            this.username = username;
+        }
     }
 }

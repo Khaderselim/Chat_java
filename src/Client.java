@@ -7,20 +7,20 @@ import java.util.Enumeration;
 
 public class Client {
     public static JButton connectBtn, disconnectBtn, sendBtn, newChatBtn, singlebtn;
-    public static JLabel  statusLbl, hostLbl;
+    public static JLabel statusLbl, hostLbl;
     public static JTextField hostField, inputField;
-    public static JTextArea  messageArea;
+    public static JTextArea messageArea;
     public static JPanel chatPanel, loginPanel, selectPanel, singlePanel, singlenamesPanel;
     public static ButtonGroup singlenameGroup;
     public static JFrame frame;
 
-    public static Socket        controlSocket, messageSocket, voiceSocket;
-    public static PrintWriter   controlOut, messageOut;
+    public static Socket controlSocket, messageSocket, voiceSocket;
+    public static PrintWriter controlOut, messageOut;
     public static BufferedReader controlIn, messageIn;
 
     private static final AudioFormat AUDIO_FORMAT = new AudioFormat(16000, 16, 1, true, true);
-    public static TargetDataLine microphone;   // mic  → network
-    public static SourceDataLine speakers;     // network → speakers
+    public static TargetDataLine microphone;
+    public static SourceDataLine speakers;
     private volatile Thread micThread;
     private volatile Thread speakerThread;
 
@@ -56,18 +56,18 @@ public class Client {
         JScrollPane scrollPane = new JScrollPane(messageArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
-        inputField    = new JTextField();
-        sendBtn       = new JButton("Send");
+        inputField = new JTextField();
+        sendBtn = new JButton("Send");
         disconnectBtn = new JButton("Disconnect");
-        newChatBtn    = new JButton("New Chat");
+        newChatBtn = new JButton("New Chat");
         inputPanel.add(inputField, BorderLayout.CENTER);
         inputPanel.add(sendBtn,    BorderLayout.EAST);
         JPanel westBtns = new JPanel(new GridLayout(1, 2, 4, 0));
         westBtns.add(newChatBtn);
         westBtns.add(disconnectBtn);
-        inputPanel.add(westBtns, BorderLayout.WEST);
-        chatPanel.add(scrollPane,  BorderLayout.CENTER);
-        chatPanel.add(inputPanel,  BorderLayout.SOUTH);
+        inputPanel.add(westBtns,BorderLayout.WEST);
+        chatPanel.add(scrollPane,BorderLayout.CENTER);
+        chatPanel.add(inputPanel,BorderLayout.SOUTH);
 
         selectPanel = new JPanel(new GridLayout(2, 1, 10, 10));
         selectPanel.setBorder(BorderFactory.createEmptyBorder(50, 100, 50, 100));
@@ -98,41 +98,37 @@ public class Client {
         JPanel singleButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
         singleButtonPanel.setBackground(new Color(240, 240, 240));
         JButton connectToChat = new JButton("Connect to Chat");
-        JButton backBtn       = new JButton("Back");
+        JButton backBtn = new JButton("Back");
         connectToChat.addActionListener(e -> connectToSingleChat());
         backBtn.addActionListener(e -> switchPanel(selectPanel));
         singleButtonPanel.add(connectToChat);
         singleButtonPanel.add(backBtn);
-        singlePanel.add(singleLbl,         BorderLayout.NORTH);
-        singlePanel.add(nameScrollPane,    BorderLayout.CENTER);
-        singlePanel.add(singleButtonPanel, BorderLayout.SOUTH);
+        singlePanel.add(singleLbl,BorderLayout.NORTH);
+        singlePanel.add(nameScrollPane,BorderLayout.CENTER);
+        singlePanel.add(singleButtonPanel,BorderLayout.SOUTH);
 
         frame.add(loginPanel);
         frame.setVisible(true);
 
-        connectBtn.addActionListener(e    -> connectToServer());
-        sendBtn.addActionListener(e       -> sendMessage());
-        inputField.addActionListener(e    -> sendMessage());
-        disconnectBtn.addActionListener(e -> disconnectFromServer());
-        newChatBtn.addActionListener(e    -> startNewChat());
+        connectBtn.addActionListener(e-> connectToServer());
+        sendBtn.addActionListener(e-> sendMessage());
+        inputField.addActionListener(e-> sendMessage());
+        disconnectBtn.addActionListener(e-> disconnectFromServer());
+        newChatBtn.addActionListener(e-> startNewChat());
     }
 
 
     private void connectToServer() {
         try {
-            controlSocket = new Socket("localhost", 1234);
-            controlOut    = new PrintWriter(controlSocket.getOutputStream(), true);
-            controlIn     = new BufferedReader(new InputStreamReader(controlSocket.getInputStream()));
-
+            controlSocket = new Socket("192.168.1.133", 1234);
+            controlOut = new PrintWriter(controlSocket.getOutputStream(), true);
+            controlIn = new BufferedReader(new InputStreamReader(controlSocket.getInputStream()));
             username = hostField.getText().trim();
             if (username.isEmpty()) username = "User";
-
             controlOut.println(username);
             statusLbl.setText("Connected!");
-
             String confirmation = controlIn.readLine();
             System.out.println("Control: " + confirmation);
-
             switchPanel(selectPanel);
         } catch (Exception ex) {
             statusLbl.setText("Connection failed!");
@@ -140,14 +136,12 @@ public class Client {
         }
     }
 
-
     private void switchPanel(JPanel panel) {
         frame.getContentPane().removeAll();
         frame.add(panel);
         frame.revalidate();
         frame.repaint();
     }
-
 
     private void switchToSinglePanel() {
         controlOut.println("single");
@@ -195,12 +189,12 @@ public class Client {
                 closeMessageSocket();  // clean up any previous session
                 closeVoiceSocket();
 
-                messageSocket = new Socket("localhost", 1235);
-                messageOut    = new PrintWriter(messageSocket.getOutputStream(), true);
-                messageIn     = new BufferedReader(new InputStreamReader(messageSocket.getInputStream()));
+                messageSocket = new Socket("192.168.1.133", 1235);
+                messageOut = new PrintWriter(messageSocket.getOutputStream(), true);
+                messageIn = new BufferedReader(new InputStreamReader(messageSocket.getInputStream()));
                 messageOut.println(username + ":" + selectedName);
 
-                voiceSocket = new Socket("localhost", 1236);
+                voiceSocket = new Socket("192.168.1.133", 1236);
                 OutputStream voiceOut = voiceSocket.getOutputStream();
                 voiceOut.write((username + ":" + selectedName + "\n").getBytes());
                 voiceOut.flush();
@@ -293,7 +287,6 @@ public class Client {
     private void sendMessage() {
         String message = inputField.getText().trim();
         if (message.isEmpty()) return;
-        if (message.equalsIgnoreCase("exit")) { disconnectFromServer(); return; }
         if (messageOut == null) {
             JOptionPane.showMessageDialog(frame, "Not connected!", "Error", JOptionPane.ERROR_MESSAGE);
             return;
@@ -318,7 +311,7 @@ public class Client {
         closeMessageSocket();
         closeVoiceSocket();
         try {
-            if (controlOut    != null) { controlOut.println("disconnect"); controlOut = null; }
+            if (controlOut != null) { controlOut.println("disconnect"); controlOut = null; }
             if (controlSocket != null && !controlSocket.isClosed()) {
                 controlSocket.close(); controlSocket = null;
             }
@@ -334,10 +327,9 @@ public class Client {
 
     private void closeMessageSocket() {
         try {
-            if (messageOut != null) { messageOut.println("exit"); messageOut = null; }
-            messageIn = null;
             if (messageSocket != null && !messageSocket.isClosed()) {
-                messageSocket.close(); messageSocket = null;
+                messageSocket.close();
+                messageSocket = null;
             }
         } catch (IOException ex) {
             System.out.println("Error closing message socket: " + ex);
@@ -346,17 +338,32 @@ public class Client {
 
     private void closeVoiceSocket() {
         // Stop audio threads first
-        if (micThread     != null) { micThread.interrupt();     micThread     = null; }
-        if (speakerThread != null) { speakerThread.interrupt(); speakerThread = null; }
+        if (micThread != null) {
+            micThread.interrupt();
+            micThread = null;
+        }
+        if (speakerThread != null) {
+            speakerThread.interrupt();
+            speakerThread = null;
+        }
 
         // Close hardware lines
-        if (microphone != null && microphone.isOpen()) { microphone.stop(); microphone.close(); microphone = null; }
-        if (speakers   != null && speakers.isOpen())   { speakers.stop();   speakers.close();   speakers   = null; }
+        if (microphone != null && microphone.isOpen()) {
+            microphone.stop();
+            microphone.close();
+            microphone = null;
+        }
+        if (speakers != null && speakers.isOpen()){
+            speakers.stop();
+            speakers.close();
+            speakers = null;
+        }
 
         // Close socket (will unblock voiceIn.read in speakerThread)
         try {
             if (voiceSocket != null && !voiceSocket.isClosed()) {
-                voiceSocket.close(); voiceSocket = null;
+                voiceSocket.close();
+                voiceSocket = null;
             }
         } catch (IOException ex) {
             System.out.println("Error closing voice socket: " + ex);
