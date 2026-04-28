@@ -8,173 +8,145 @@ import java.util.Map;
 public class Server {
     private static final int CONTROL_PORT = 1234;
     private static final int MESSAGE_PORT = 1235;
+    private static final int VOICE_PORT   = 1236;  // dedicated voice port
 
-    private static Map<String, ClientHandler> clientHandlers = Collections.synchronizedMap(new HashMap<>());
-    public static Map<String, String> userMap = Collections.synchronizedMap(new HashMap<>());
-    private static Map<PrintWriter, ClientHandler> messageWriters = Collections.synchronizedMap(new HashMap<>());
+    private static final Map<String, ClientHandler>     clientHandlers = Collections.synchronizedMap(new HashMap<>());
+    public  static final Map<String, String>             userMap        = Collections.synchronizedMap(new HashMap<>());
+    private static final Map<PrintWriter, ClientHandler> messageWriters = Collections.synchronizedMap(new HashMap<>());
+
+    // voice: username -> their socket OutputStream (so we can relay audio to them)
+    private static final Map<String, OutputStream> voiceOutputs = Collections.synchronizedMap(new HashMap<>());
 
     public static void main(String[] args) {
         System.out.println("Chat server started:");
         System.out.println("- Control port: " + CONTROL_PORT);
         System.out.println("- Message port: " + MESSAGE_PORT);
+        System.out.println("- Voice port:   " + VOICE_PORT);
 
-        new Thread(() -> startControlServer()).start();
-        new Thread(() -> startMessageServer()).start();
+        new Thread(Server::startControlServer).start();
+        new Thread(Server::startMessageServer).start();
+        new Thread(Server::startVoiceServer).start();
     }
 
+    // ── Server listeners ──────────────────────────────────────────────────────
+
     private static void startControlServer() {
-        try {
-            ServerSocket controlSocket = new ServerSocket(CONTROL_PORT);
-            while (true) {
-                Socket clientSocket = controlSocket.accept();
-                System.out.println("[CONTROL] New control connection: " + clientSocket.getInetAddress());
-                new ControlHandler(clientSocket).start();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        try (ServerSocket ss = new ServerSocket(CONTROL_PORT)) {
+            while (true) { new ControlHandler(ss.accept()).start(); }
+        } catch (IOException e) { e.printStackTrace(); }
     }
 
     private static void startMessageServer() {
-        try {
-            ServerSocket messageSocket = new ServerSocket(MESSAGE_PORT);
-            while (true) {
-                Socket clientSocket = messageSocket.accept();
-                System.out.println("[MESSAGE] New message connection: " + clientSocket.getInetAddress());
-                new MessageHandler(clientSocket).start();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        try (ServerSocket ss = new ServerSocket(MESSAGE_PORT)) {
+            while (true) { new MessageHandler(ss.accept()).start(); }
+        } catch (IOException e) { e.printStackTrace(); }
     }
 
-    // -------------------------------------------------------------------------
-    // Control Handler
-    // -------------------------------------------------------------------------
+    private static void startVoiceServer() {
+        try (ServerSocket ss = new ServerSocket(VOICE_PORT)) {
+            while (true) { new VoiceHandler(ss.accept()).start(); }
+        } catch (IOException e) { e.printStackTrace(); }
+    }
+
+    // ── Control Handler ───────────────────────────────────────────────────────
+
     private static class ControlHandler extends Thread {
-        private Socket socket;
+        private final Socket socket;
         private PrintWriter out;
         private BufferedReader in;
         private String username;
 
-        public ControlHandler(Socket socket) {
-            this.socket = socket;
-        }
+        ControlHandler(Socket socket) { this.socket = socket; }
 
+        @Override
         public void run() {
             try {
                 out = new PrintWriter(socket.getOutputStream(), true);
                 in  = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-                // --- Step 1: register username ---
                 username = in.readLine();
                 if (username == null || username.trim().isEmpty()) username = "Anonymous";
-                System.out.println("[CONTROL] User registered: " + username);
+                System.out.println("[CONTROL] Registered: " + username);
 
                 clientHandlers.put(username, new ClientHandler(username));
                 out.println("USERNAME_CONFIRMED:" + username);
 
                 String command;
                 while ((command = in.readLine()) != null) {
-
-                    if (command.equalsIgnoreCase("exit") || command.equalsIgnoreCase("disconnect")) {
-                        break;
-                    }
+                    if (command.equalsIgnoreCase("exit") || command.equalsIgnoreCase("disconnect")) break;
 
                     if (command.equalsIgnoreCase("single")) {
-                        // Send available users list
                         sendAvailableUsers();
-
-                        // Read the chosen target
                         String target = in.readLine();
                         if (target == null) break;
-
-                        // Update userMap so MessageHandlers can do P2P lookup
                         userMap.put(username, target);
                         out.println("TARGET_CONFIRMED:" + target);
-                        System.out.println("[CONTROL] " + username + " -> Target: " + target);
+                        System.out.println("[CONTROL] " + username + " -> " + target);
                     }
-                    // Future: handle "group" or other modes here
                 }
-
             } catch (IOException e) {
-                System.out.println("[CONTROL] Error for user " + username + ": " + e.getMessage());
+                System.out.println("[CONTROL] Error for " + username + ": " + e.getMessage());
             } finally {
                 clientHandlers.remove(username);
                 userMap.remove(username);
                 try { socket.close(); } catch (IOException ignored) {}
-                System.out.println("[CONTROL] Connection closed for: " + username);
             }
         }
 
         private void sendAvailableUsers() {
             out.println("AVAILABLE_USERS:");
             for (String name : clientHandlers.keySet()) {
-                if (!name.equals(username)) {
-                    out.println(name);
-                }
+                if (!name.equals(username)) out.println(name);
             }
             out.println("END_LIST");
         }
     }
 
+    // ── Message Handler ───────────────────────────────────────────────────────
 
     private static class MessageHandler extends Thread {
-        private Socket socket;
+        private final Socket socket;
         private PrintWriter out;
         private BufferedReader in;
         private String username;
         private String selectedTarget;
 
-        public MessageHandler(Socket socket) {
-            this.socket = socket;
-        }
+        MessageHandler(Socket socket) { this.socket = socket; }
 
+        @Override
         public void run() {
             try {
                 out = new PrintWriter(socket.getOutputStream(), true);
                 in  = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-                // Session info: username:target
                 String sessionInfo = in.readLine();
                 if (sessionInfo != null) {
                     String[] parts = sessionInfo.split(":", 2);
                     username       = parts.length > 0 ? parts[0] : "Anonymous";
                     selectedTarget = parts.length > 1 ? parts[1] : "";
-
-                    // Update userMap with latest target (may differ from control-phase value
-                    // if the user hit "New Chat" and the old message socket is still closing)
                     userMap.put(username, selectedTarget);
                     messageWriters.put(out, clientHandlers.getOrDefault(username, new ClientHandler(username)));
                     System.out.println("[MESSAGE] " + username + " connected, target=" + selectedTarget);
                 }
-                String fileName = getFileName(selectedTarget);
-                File file = new File(fileName);
+
+                // Send chat history if it exists
+                File file = new File(getFileName(username, selectedTarget));
                 if (file.exists()) {
                     try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             String[] split = line.split(": ", 2);
-                            if (split[0].equals(username)){
-                                line = "You: "+split[1];
-                            }
-                            out.println(line);
+                            out.println(split[0].equals(username) ? "You: " + split[1] : line);
                         }
-                    } catch (IOException e) {
-                        System.out.println("[MESSAGE] Error reading file: " + e.getMessage());
                     }
-                }else {
+                } else {
                     out.println("[Server] Welcome " + username + "! Chatting with: " + selectedTarget);
                 }
 
                 String clientMessage;
                 while ((clientMessage = in.readLine()) != null) {
                     if (clientMessage.equalsIgnoreCase("exit")) break;
-
                     System.out.println("[" + username + "] " + clientMessage);
-
-                    // P2P: deliver only to the intended target
-                    // Verify via userMap that the target still expects messages from us
                     sendToSpecificUser(selectedTarget, username + ": " + clientMessage);
                 }
 
@@ -184,44 +156,108 @@ public class Server {
                 if (out != null) messageWriters.remove(out);
                 if (username != null) userMap.remove(username);
                 try { socket.close(); } catch (IOException ignored) {}
-                System.out.println("[MESSAGE] Connection closed for: " + username);
             }
         }
 
-
         private void sendToSpecificUser(String targetUsername, String message) {
-            // Check that the target's current partner is the sender (mutual P2P)
-            String fileName = getFileName(targetUsername);
             String targetPartner = userMap.get(targetUsername);
             if (targetPartner == null || !targetPartner.equals(username)) {
-                // Target is not currently paired with us; drop or optionally queue
-                System.out.println("[MESSAGE] Dropped: " + targetUsername + " is not paired with " + username);
+                System.out.println("[MESSAGE] Dropped (not paired): " + targetUsername);
                 return;
             }
-
             for (Map.Entry<PrintWriter, ClientHandler> entry : messageWriters.entrySet()) {
                 if (entry.getValue().username.equals(targetUsername)) {
                     entry.getKey().println(message);
-                    try (FileWriter fw = new FileWriter(fileName, true)) {
+                    try (FileWriter fw = new FileWriter(getFileName(username, targetUsername), true)) {
                         fw.write(message + "\n");
                     } catch (IOException e) {
-                        System.out.println("[MESSAGE] Error writing to file: " + e.getMessage());
-
+                        System.out.println("[MESSAGE] History write error: " + e.getMessage());
                     }
                     return;
                 }
             }
-            System.out.println("[MESSAGE] Target " + targetUsername + " not connected on message port yet.");
+            System.out.println("[MESSAGE] Target " + targetUsername + " not on message port.");
         }
-        private String getFileName(String receiver) {
-            return (username.compareTo(receiver) > 0) ? receiver + username + ".txt" : username + receiver + ".txt";
+
+        private String getFileName(String a, String b) {
+            return (a.compareTo(b) > 0) ? b + a + ".txt" : a + b + ".txt";
         }
     }
 
-    // Simple client info holder
+    // ── Voice Handler ─────────────────────────────────────────────────────────
+    //
+    // Protocol:
+    //   1. Client sends a UTF-8 header line:  "username:target\n"
+    //   2. Client then streams raw PCM audio bytes continuously.
+    //   Server reads the header, registers the client, then relays every incoming
+    //   byte directly to the target's OutputStream — zero processing.
+
+    private static class VoiceHandler extends Thread {
+        private final Socket socket;
+        private String username;
+        private String selectedTarget;
+
+        VoiceHandler(Socket socket) { this.socket = socket; }
+
+        @Override
+        public void run() {
+            try {
+                InputStream  in  = socket.getInputStream();
+                OutputStream out = socket.getOutputStream();
+
+                // Read header line byte-by-byte so we don't buffer any audio
+                String header = readLine(in);
+                if (header == null) return;
+
+                String[] parts = header.split(":", 2);
+                username       = parts.length > 0 ? parts[0] : "Unknown";
+                selectedTarget = parts.length > 1 ? parts[1] : "";
+
+                voiceOutputs.put(username, out);
+                System.out.println("[VOICE] " + username + " connected, target=" + selectedTarget);
+
+                // Pure relay: read from sender, write to target
+                byte[] buf = new byte[1024];
+                int    n;
+                while ((n = in.read(buf)) > 0) {
+                    OutputStream targetOut = voiceOutputs.get(selectedTarget);
+                    if (targetOut != null) {
+                        try {
+                            targetOut.write(buf, 0, n);
+                            targetOut.flush();
+                        } catch (IOException e) {
+                            System.out.println("[VOICE] Relay write failed: " + e.getMessage());
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                System.out.println("[VOICE] Error for " + username + ": " + e.getMessage());
+            } finally {
+                if (username != null) voiceOutputs.remove(username);
+                try { socket.close(); } catch (IOException ignored) {}
+                System.out.println("[VOICE] Closed for: " + username);
+            }
+        }
+
+        /**
+         * Reads one '\n'-terminated line from a raw InputStream byte-by-byte.
+         * Safe to call before switching the stream to binary mode.
+         */
+        private String readLine(InputStream in) throws IOException {
+            StringBuilder sb = new StringBuilder();
+            int b;
+            while ((b = in.read()) != -1) {
+                if (b == '\n') break;
+                if (b != '\r') sb.append((char) b);
+            }
+            return sb.length() > 0 ? sb.toString() : null;
+        }
+    }
+
+    // ── Simple client info holder ─────────────────────────────────────────────
+
     private static class ClientHandler {
-        String username;
-        public ClientHandler(String username) { this.username = username; }
+        final String username;
+        ClientHandler(String username) { this.username = username; }
     }
-
 }
