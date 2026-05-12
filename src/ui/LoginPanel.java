@@ -7,6 +7,7 @@ import java.awt.*;
 public class LoginPanel extends JPanel {
 
     private final JTextField usernameField;
+    private final JPasswordField passwordField;
     private final JLabel statusLabel;
     private Runnable onConnect;
 
@@ -34,7 +35,10 @@ public class LoginPanel extends JPanel {
         UIFactory.styleTextField(usernameField, "Username…");
         usernameField.setMaximumSize(new Dimension(280, 42));
         usernameField.setAlignmentX(Component.CENTER_ALIGNMENT);
-
+        passwordField = new JPasswordField(20);
+        UIFactory.styleTextField(passwordField, "Password…");
+        passwordField.setMaximumSize(new Dimension(280, 42));
+        passwordField.setAlignmentX(Component.CENTER_ALIGNMENT);
         JButton connectBtn = UIFactory.createAccentButton("Connect", AppColors.ACCENT);
         connectBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         connectBtn.setMaximumSize(new Dimension(280, 42));
@@ -50,6 +54,8 @@ public class LoginPanel extends JPanel {
         card.add(Box.createVerticalStrut(24));
         card.add(usernameField);
         card.add(Box.createVerticalStrut(14));
+        card.add(passwordField);
+        card.add(Box.createVerticalStrut(24));
         card.add(connectBtn);
         card.add(Box.createVerticalStrut(10));
         card.add(statusLabel);
@@ -65,6 +71,9 @@ public class LoginPanel extends JPanel {
     public String getUsername() {
         String t = usernameField.getText().trim();
         return t.equals("Username") ? "" : t;
+    }
+    public String getPassword() {
+        return new String(passwordField.getPassword());
     }
 
     public void setStatus(String msg, boolean isError) {

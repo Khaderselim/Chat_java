@@ -35,6 +35,7 @@ public class Client {
     ByteArrayOutputStream vmBuffer;
     long vmStartTime;
     String username;
+    String password;
     String currentChatTarget;
     boolean currentChatIsGroup;
     final Map<String, String> groupNames = new LinkedHashMap<>();
@@ -102,7 +103,10 @@ public class Client {
 
     void connectToServer() {
         username = loginPanel.getUsername();
+        password = loginPanel.getPassword();
+
         if (username.isEmpty()) { loginPanel.setStatus("Enter a username", true); return; }
+        if (password.isEmpty()) { loginPanel.setStatus("Enter a password", true); return; }
 
         new Thread(() -> {
             try {
@@ -112,12 +116,14 @@ public class Client {
                         new InputStreamReader(controlSocket.getInputStream()));
 
                 controlOut.println("LOGIN:" + username);
+                controlOut.println("PASSWORD:" + password);
                 String resp = controlIn.readLine();
 
                 if (resp == null || resp.startsWith("ERROR:")) {
                     SwingUtilities.invokeLater(() -> loginPanel.setStatus(
-                            resp != null && resp.contains("TAKEN")
+                            resp != null && resp.contains("INVALID")? "Invalid Username or Password" : resp.contains("TAKEN")
                                     ? "Username already in use!" : "Connection failed!", true));
+
                     return;
                 }
 

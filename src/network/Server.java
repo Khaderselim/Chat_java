@@ -4,6 +4,8 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.sql.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Server {
 
@@ -17,8 +19,8 @@ public class Server {
     static final Map<String, OutputStream> voiceOutputs = new ConcurrentHashMap<>();
     static final Map<String, Group> groups = new ConcurrentHashMap<>();
 
-    private static final java.util.concurrent.atomic.AtomicInteger groupIdCounter =
-            new java.util.concurrent.atomic.AtomicInteger(1);
+    private static final AtomicInteger groupIdCounter =
+            new AtomicInteger(1);
 
 
     static boolean isValidMessage(String msg) {
@@ -71,8 +73,14 @@ public class Server {
         final Socket socket;
         PrintWriter out;
         BufferedReader in;
+        Connection conn;
         String username;
+        String password;
         boolean online = false;
+        String url = "jdbc:oracle:thin:@localhost:1521:XE";
+        String user = "messanger";
+        String pass = "system";
+
 
         ControlHandler(Socket s) {
             this.socket = s;
@@ -80,13 +88,26 @@ public class Server {
 
         @Override public void run() {
             try {
+                Class.forName("oracle.jdbc.driver.OracleDriver");
+
                 out = new PrintWriter(socket.getOutputStream(), true);
                 in  = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                conn = DriverManager.getConnection(url,user,pass);
                 String first = in.readLine();
+                String second = in.readLine();
                 if (first == null) return;
-                System.out.println(first);
                 username = first.split(":", 2)[1];
-
+                password = second.split(":", 2)[1];
+                String query = "SELECT PASSWORD FROM USERS WHERE USERNAME = ?";
+                PreparedStatement ps = conn.prepareStatement(query);
+                ps.setString(1, username);
+                ResultSet rs = ps.executeQuery();
+                if (!rs.next() || !rs.getString("PASSWORD").equals(password)) {
+                    System.out.println("ERROR:INVALID_USERNAME_OR_PASSWORD");
+                    out.println("ERROR:INVALID_USERNAME_OR_PASSWORD");
+                    return;
+                }
+                System.out.println(password);
                 ControlHandler existing = controlHandlers.get(username);
                 if (existing != null && existing.online) {
                     out.println("ERROR:USERNAME_TAKEN"); return;
@@ -103,15 +124,18 @@ public class Server {
 
             } catch (IOException e) {
                 System.out.println("[CTRL] Disconnected : " + username);
+            } catch (ClassNotFoundException | SQLException e) {
+                throw new RuntimeException(e);
             } finally { cleanup(); }
         }
 
-        void handleCommand(String cmd) {
+        void handleCommand(String cmd) throws SQLException {
             if (cmd.equalsIgnoreCase("DISCONNECT")) { cleanup(); return; }
             if (cmd.equals("LIST_USERS"))  { sendUserList();  return; }
             if (cmd.equals("LIST_GROUPS")) {
                 load_groups();
-                for (Group g : groups.values()) System.out.println(g.serialize());
+//                System.out.println(groups);
+//                for (Group g : groups.values()) System.out.println(g.serialize());
                 sendGroupList();
                 return;
             }
@@ -129,6 +153,24 @@ public class Server {
                 String gid = "G" + groupIdCounter.getAndIncrement();
                 Group g = new Group(gid, gname, username);
                 groups.put(gid, g);
+
+                // Insert into database
+                String filename = "group_" + gid + ".txt";
+                String sql = "INSERT INTO GROUP_CHAT (ID, GID, NAME, FILENAME, CREATOR, MEMBERS) VALUES (seq_group.nextval, ?, ?, ?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setString(1, gid);
+                    ps.setString(2, gname);
+                    ps.setString(3, filename);
+                    ps.setString(4, username);
+                    ps.setString(5, String.join(",", g.members));
+                    ps.executeUpdate();
+                    System.out.println("[DB] Group '" + gname + "' inserted into database");
+                } catch (SQLException e) {
+                    System.err.println("[DB] Error inserting group: " + e.getMessage());
+                    out.println("ERROR:DATABASE_INSERT_FAILED");
+                    return;
+                }
+
                 out.println("GROUP_CREATED:" + g.serialize());
                 System.out.println("[GROUP] '" + gname + "' created by " + username);
                 return;
@@ -142,6 +184,17 @@ public class Server {
                 if (!g.members.contains(username)) { out.println("ERROR:NOT_MEMBER");      return; }
                 if (g.members.contains(target)) { out.println("ERROR:ALREADY_MEMBER");  return; }
                 g.members.add(target);
+                System.out.println(g.members);
+                String sql = "UPDATE GROUP_CHAT SET MEMBERS = ? WHERE GID = ?";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setString(1, String.join(",", g.members));
+                    ps.setString(2, gid);
+                    ps.executeUpdate();
+                } catch (SQLException e) {
+                    System.err.println("[DB] Error inserting group: " + e.getMessage());
+                    out.println("ERROR:DATABASE_INSERT_FAILED");
+                    return;
+                }
                 out.println("MEMBER_ADDED:" + gid + ":" + target);
                 ControlHandler ch = controlHandlers.get(target);
                 if (ch != null && ch.online) ch.send("ADDED_TO_GROUP:" + g.serialize());
@@ -156,20 +209,31 @@ public class Server {
                     out.println("USER:" + e.getKey() + ":" + (e.getValue().online ? "ONLINE" : "OFFLINE"));
             out.println("USER_LIST_END");
         }
-        void load_groups() {
-            File dir = new File(HISTORY_DIR);
-            if (!dir.exists() || !dir.isDirectory()) return;
-            File[] files = dir.listFiles((d, name) -> name.startsWith("group_") && name.endsWith(".txt"));
-            if (files == null) return;
-            try {
-                for (File f : files) {
-                    String gid = f.getName().substring(6, f.getName().length() - 4);
-                    Group g = new Group(gid, "Test2", "slim");
-                    g.members.add(username);
-                    groups.put(gid, g);
+        void load_groups() throws SQLException {
+            String query = "SELECT * FROM GROUP_CHAT";
+            try (PreparedStatement ps = conn.prepareStatement(query);
+                 ResultSet rs = ps.executeQuery()) {
+                int id = 0;
+                while (rs.next()) {
+                    String gid = rs.getString("GID");
+                    String group_name = rs.getString("NAME");
+                    String creator = rs.getString("CREATOR");
+                    Group g = new Group(gid, group_name, creator);
+                    String membersStr = rs.getString("MEMBERS");
+                    id = Integer.parseInt(rs.getString("ID"));
 
+                    // CLEAR the members list (which has creator from constructor)
+                    g.members.clear();
+
+                    // NOW add all members from database
+                    if (membersStr != null && !membersStr.trim().isEmpty()) {
+                        String[] members = membersStr.split(",");
+                        g.members.addAll(Arrays.asList(members));
+                    }
+                    groups.put(gid, g);
                 }
-            } catch (Exception ignored) {}
+                groupIdCounter.set(id + 1);
+            }
         }
         void sendGroupList() {
             out.println("GROUP_LIST_START");
