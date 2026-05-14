@@ -43,6 +43,7 @@ public class Client {
     final Map<String, Boolean> userOnline = new LinkedHashMap<>();
     JFrame frame;
     LoginPanel loginPanel;
+    SignPanel signPanel;
     SidebarPanel sidebarPanel;
     ChatPanel chatPanel;
 
@@ -60,9 +61,14 @@ public class Client {
         frame.setLocationRelativeTo(null);
         frame.getContentPane().setBackground(AppColors.BG_DARK);
         loginPanel = new LoginPanel();
+        signPanel = new SignPanel();
         sidebarPanel = new SidebarPanel();
         chatPanel = new ChatPanel();
         loginPanel.setOnConnect(this::connectToServer);
+        loginPanel.setOnRegister(this::showSignup);
+        signPanel.setOnRegister(this::registerUser);
+        signPanel.setOnBack(this::showLogin);
+
         sidebarPanel.setOnDisconnect(this::disconnectFromServer);
         sidebarPanel.setOnNewGroup(() -> showCreateGroupDialog());
         sidebarPanel.setOnUserClick(this::openPrivateChat);
@@ -83,6 +89,13 @@ public class Client {
         loginPanel.focusField();
     }
 
+    void showSignup() {
+        frame.setContentPane(signPanel);
+        frame.revalidate();
+        frame.repaint();
+        signPanel.focusField();
+    }
+
     void showMain() {
         JSplitPane split = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT, sidebarPanel, chatPanel);
@@ -100,6 +113,57 @@ public class Client {
         frame.repaint();
     }
 
+    void registerUser() {
+        String username = signPanel.getUsername();
+        String password = signPanel.getPassword();
+        if (username.isEmpty()) { signPanel.setStatus("Enter a username", true); return; }
+        if (password.isEmpty()) { signPanel.setStatus("Enter a password", true); return; }
+        if (!signPanel.isPasswordValid()) { signPanel.setStatus("Passwords do not match", true); return;}
+        new Thread(() -> {
+            try {
+                controlSocket = new Socket(HOST, CONTROL_PORT);
+                controlOut    = new PrintWriter(controlSocket.getOutputStream(), true);
+                controlIn     = new BufferedReader(
+                        new InputStreamReader(controlSocket.getInputStream()));
+                controlOut.println("REGISTER");
+                controlOut.println("LOGIN:" + username);
+                controlOut.println("PASSWORD:" + password);
+                String resp = controlIn.readLine();
+
+                if (resp == null || resp.startsWith("ERROR:")) {
+                    SwingUtilities.invokeLater(() -> loginPanel.setStatus(
+                            resp != null && resp.contains("INVALID")? "Invalid Username or Password" : resp.contains("TAKEN")
+                                    ? "Username already in use!" : "Connection failed!", true));
+
+                    return;
+                }
+
+                messageSocket = new Socket(HOST, MESSAGE_PORT);
+                messageOut    = new PrintWriter(messageSocket.getOutputStream(), true);
+                messageIn     = new BufferedReader(
+                        new InputStreamReader(messageSocket.getInputStream()));
+                messageOut.println("REGISTER:" + username);
+
+                SwingUtilities.invokeLater(() -> {
+                    frame.setTitle("💬 Messenger — " + username);
+                    sidebarPanel.setMyName(username);
+                    showMain();
+                });
+
+                startControlListener();
+                startMessageListener();
+
+                requestUserList();
+                requestGroupList();
+
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() ->
+                        signPanel.setStatus(
+                                "Cannot reach server (HOST=" + HOST + ")", true));
+            }
+        }).start();
+
+    }
 
     void connectToServer() {
         username = loginPanel.getUsername();
@@ -114,7 +178,7 @@ public class Client {
                 controlOut    = new PrintWriter(controlSocket.getOutputStream(), true);
                 controlIn     = new BufferedReader(
                         new InputStreamReader(controlSocket.getInputStream()));
-
+                controlOut.println("LOGIN");
                 controlOut.println("LOGIN:" + username);
                 controlOut.println("PASSWORD:" + password);
                 String resp = controlIn.readLine();
@@ -152,6 +216,8 @@ public class Client {
             }
         }).start();
     }
+
+
 
     void requestUserList()  { controlOut.println("LIST_USERS"); }
     void requestGroupList() { controlOut.println("LIST_GROUPS"); }

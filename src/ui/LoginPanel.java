@@ -10,6 +10,7 @@ public class LoginPanel extends JPanel {
     private final JPasswordField passwordField;
     private final JLabel statusLabel;
     private Runnable onConnect;
+    private Runnable onRegister;
 
     public LoginPanel() {
         setLayout(new GridBagLayout());
@@ -43,6 +44,10 @@ public class LoginPanel extends JPanel {
         connectBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         connectBtn.setMaximumSize(new Dimension(280, 42));
 
+        JButton registerBtn = UIFactory.createSmallButton("Register", AppColors.TEXT_SECONDARY);
+        registerBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        registerBtn.setMaximumSize(new Dimension(280, 42));
+
         statusLabel = new JLabel("", SwingConstants.CENTER);
         statusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         statusLabel.setForeground(AppColors.CALL_RED);
@@ -58,10 +63,13 @@ public class LoginPanel extends JPanel {
         card.add(Box.createVerticalStrut(24));
         card.add(connectBtn);
         card.add(Box.createVerticalStrut(10));
+        card.add(registerBtn);
+        card.add(Box.createVerticalStrut(10));
         card.add(statusLabel);
         add(card);
         connectBtn.addActionListener(e -> doConnect());
         usernameField.addActionListener(e -> doConnect());
+        registerBtn.addActionListener(e -> { if (onRegister != null) onRegister.run(); });
     }
 
     private void doConnect() {
@@ -84,5 +92,6 @@ public class LoginPanel extends JPanel {
     public void focusField() { usernameField.requestFocus(); }
 
     public void setOnConnect(Runnable r) { onConnect = r; }
+    public void setOnRegister(Runnable r) { onRegister = r; }
 }
 
