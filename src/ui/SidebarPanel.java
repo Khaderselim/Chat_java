@@ -118,19 +118,23 @@ public class SidebarPanel extends JPanel {
         groupUnread.remove(gid);
         SwingUtilities.invokeLater(this::refreshGroupList);
     }
-
-    public void setOnDisconnect(Runnable r)                                          { onDisconnect = r; }
-    public void setOnNewGroup(Runnable r)                                            { onNewGroup = r; }
-    public void setOnUserClick(java.util.function.Consumer<String> c)               { onUserClick = c; }
-    public void setOnGroupClick(java.util.function.BiConsumer<String,String> c)     { onGroupClick = c; }
-    public void setOnAddMemberClick(java.util.function.Consumer<String> c)          { onAddMemberClick = c; }
+    public void clearGroups() {
+        groupNames.clear();
+        groupUnread.clear();
+        SwingUtilities.invokeLater(this::refreshGroupList);
+    }
+    public void setOnDisconnect(Runnable r) { onDisconnect = r; }
+    public void setOnNewGroup(Runnable r) { onNewGroup = r; }
+    public void setOnUserClick(java.util.function.Consumer<String> c) { onUserClick = c; }
+    public void setOnGroupClick(java.util.function.BiConsumer<String,String> c) { onGroupClick = c; }
+    public void setOnAddMemberClick(java.util.function.Consumer<String> c) { onAddMemberClick = c; }
 
     private void refreshUserList() {
         userListPanel.removeAll();
         for (Map.Entry<String, Boolean> e : userStatus.entrySet()) {
-            String  uname  = e.getKey();
+            String uname  = e.getKey();
             boolean online = e.getValue();
-            int     unread = unreadCounts.getOrDefault(uname, 0);
+            int unread = unreadCounts.getOrDefault(uname, 0);
             userListPanel.add(buildUserItem(uname, online, unread));
         }
         userListPanel.revalidate();

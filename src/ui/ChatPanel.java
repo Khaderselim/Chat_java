@@ -313,6 +313,7 @@ public class ChatPanel extends JPanel {
 
     public void clearMessages() {
         messagesPanel.removeAll();
+        messagesPanel.add(Box.createVerticalGlue()); // ← Pushes messages to top
         messagesPanel.revalidate();
         messagesPanel.repaint();
     }
@@ -364,7 +365,7 @@ public class ChatPanel extends JPanel {
         JPanel row = new JPanel(new FlowLayout(
                 isMe ? FlowLayout.RIGHT : FlowLayout.LEFT, 0, 0));
         row.setBackground(AppColors.BG_CHAT);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1)); // ← Height of 1 lets it use preferred size
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         return row;
     }
@@ -374,8 +375,11 @@ public class ChatPanel extends JPanel {
         ph.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         ph.setForeground(AppColors.TEXT_SECONDARY);
         ph.setAlignmentX(Component.CENTER_ALIGNMENT);
-        messagesPanel.add(Box.createVerticalGlue());
-        messagesPanel.add(ph);
+        JPanel placeRow = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        placeRow.setBackground(AppColors.BG_CHAT);
+        placeRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+        placeRow.add(ph);
+        messagesPanel.add(placeRow);
         messagesPanel.add(Box.createVerticalGlue());
     }
 

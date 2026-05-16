@@ -93,37 +93,41 @@ public class Server {
                 String second = in.readLine();
                 String third = in.readLine();
                 if (first == null) return;
-                username = second.split(":", 2)[1];
-                password = third.split(":", 2)[1];
-                if (first.equals("REGISTER") && username != null && password != null) {
+
+                if (first.equals("REGISTER")) {
+                    String Username_register = second.split(":", 2)[1];
+                    String Password_register = third.split(":", 2)[1];
                     String query = "SELECT COUNT(*) FROM USERS WHERE USERNAME = ?";
                     PreparedStatement ps = conn.prepareStatement(query);
-                    ps.setString(1, username);
+                    ps.setString(1, Username_register);
                     ResultSet rs = ps.executeQuery();
                     if (rs.next() && rs.getInt(1) > 0) {
                         System.out.println("ERROR:USERNAME_TAKEN");
                         out.println("ERROR:USERNAME_TAKEN");
                         return;
-                    }else {
+                    } else {
                         query = "INSERT INTO USERS (ID,USERNAME, PASSWORD) VALUES (seq_user.nextval,?, ?)";
                         ps = conn.prepareStatement(query);
-                        ps.setString(1, username);
-                        ps.setString(2, password);
+                        ps.setString(1, Username_register);
+                        ps.setString(2, Password_register);
                         ps.executeUpdate();
-                        System.out.println("[DB] User '" + username + "' inserted into database");
+                        System.out.println("[DB] User '" + Username_register + "' inserted into database");
+                        out.println("SUCCESS:REGISTERED");
                     }
-                }else{
-                String query = "SELECT PASSWORD FROM USERS WHERE USERNAME = ?";
-                PreparedStatement ps = conn.prepareStatement(query);
-                ps.setString(1, username);
-                ResultSet rs = ps.executeQuery();
-                if (!rs.next() || !rs.getString("PASSWORD").equals(password)) {
-                    System.out.println("ERROR:INVALID_USERNAME_OR_PASSWORD");
-                    out.println("ERROR:INVALID_USERNAME_OR_PASSWORD");
-                    return;
-                }
-                System.out.println(password);
-            }
+                } else {
+                    username = second.split(":", 2)[1];
+                    password = third.split(":", 2)[1];
+                    String query = "SELECT PASSWORD FROM USERS WHERE USERNAME = ?";
+                    PreparedStatement ps = conn.prepareStatement(query);
+                    ps.setString(1, username);
+                    ResultSet rs = ps.executeQuery();
+                    if (!rs.next() || !rs.getString("PASSWORD").equals(password)) {
+                        System.out.println("ERROR:INVALID_USERNAME_OR_PASSWORD");
+                        out.println("ERROR:INVALID_USERNAME_OR_PASSWORD");
+                        return;
+                    }
+                    System.out.println(password);
+
                 ControlHandler existing = controlHandlers.get(username);
                 if (existing != null && existing.online) {
                     out.println("ERROR:USERNAME_TAKEN");
@@ -138,7 +142,7 @@ public class Server {
 
                 String line;
                 while ((line = in.readLine()) != null) handleCommand(line.trim());
-
+            }
             } catch (IOException e) {
                 System.out.println("[CTRL] Disconnected : " + username);
             } catch (ClassNotFoundException | SQLException e) {
@@ -323,6 +327,7 @@ public class Server {
                     if (line.startsWith("PRIVATE:")) {
                         String[] p = line.substring(8).split(":", 3);
                         if (p.length < 3) continue;
+                        System.out.println(Arrays.toString(p));
                         if (!isValidMessage(p[2])) continue;
                         deliverPrivate(p[0], p[1], p[2]);
 

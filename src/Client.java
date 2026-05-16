@@ -130,9 +130,9 @@ public class Client {
                 controlOut.println("PASSWORD:" + password);
                 String resp = controlIn.readLine();
 
-                if (resp == null || resp.startsWith("ERROR:")) {
-                    SwingUtilities.invokeLater(() -> loginPanel.setStatus(
-                            resp != null && resp.contains("INVALID")? "Invalid Username or Password" : resp.contains("TAKEN")
+                if (resp.startsWith("ERROR:")) {
+                    SwingUtilities.invokeLater(() -> signPanel.setStatus(
+                            resp.contains("INVALID")? "Invalid Username or Password" : resp.contains("TAKEN")
                                     ? "Username already in use!" : "Connection failed!", true));
 
                     return;
@@ -145,21 +145,14 @@ public class Client {
                 messageOut.println("REGISTER:" + username);
 
                 SwingUtilities.invokeLater(() -> {
-                    frame.setTitle("💬 Messenger — " + username);
-                    sidebarPanel.setMyName(username);
-                    showMain();
+                    frame.setTitle("Messenger");
+                    showLogin();
                 });
-
-                startControlListener();
-                startMessageListener();
-
-                requestUserList();
-                requestGroupList();
 
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() ->
                         signPanel.setStatus(
-                                "Cannot reach server (HOST=" + HOST + ")", true));
+                                "Cannot reach server (HOST=" + HOST + ") ", true));
             }
         }).start();
 
@@ -748,7 +741,7 @@ public class Client {
             if (messageSocket != null && !messageSocket.isClosed()) messageSocket.close();
             if (controlSocket != null && !controlSocket.isClosed()) controlSocket.close();
         } catch (IOException ignored) {}
-        userOnline.clear(); groupNames.clear(); groupMembers.clear();
+        userOnline.clear(); groupNames.clear(); groupMembers.clear();sidebarPanel.clearGroups();
         currentChatTarget = null;
         frame.setTitle("💬 Messenger");
         SwingUtilities.invokeLater(() -> { loginPanel.setStatus("Disconnected", false); showLogin(); });
